@@ -66,15 +66,26 @@ def transform(df: DataFrame) -> dict[str, DataFrame]:
     return result
 
 
+import os
+
 def load(partitions: dict[str, DataFrame], jdbc_url: str, pg_props: dict) -> None:
-    """Insert each neighborhood dataset into its own PostgreSQL table."""
+    """Insert each neighborhood dataset into PostgreSQL AND save CSV files."""
+
+    output_dir = "output/by_neighborhood"
+    os.makedirs(output_dir, exist_ok=True)
 
     for name, df in partitions.items():
+        # Save to PostgreSQL
         table_name = f"house_{name.lower().replace(' ', '_')}"
+        df.write.mode("overwrite").jdbc(url=jdbc_url, table=table_name, properties=pg_props)
+
+        # Save as CSV
+        csv_path = f"{output_dir}/{name.lower().replace(' ', '_')}.csv"
 
         df.write \
             .mode("overwrite") \
-            .jdbc(url=jdbc_url, table=table_name, properties=pg_props)
+            .option("header", True) \
+            .csv(csv_path)
 
 
 # ── Main (do not modify) ───────────────────────────────────────────────────────
