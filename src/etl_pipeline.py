@@ -40,20 +40,43 @@ PG_COLUMN_SCHEMA = (
     "distance_downtown_miles NUMERIC(6,2), sale_date DATE, days_on_market INTEGER"
 )
 
+from pyspark.sql.types import *
 
 def extract(spark: SparkSession, csv_path: str) -> DataFrame:
     """Load the CSV dataset into a PySpark DataFrame with correct data types."""
-    raise NotImplementedError
+
+    df = spark.read.option("header", True).csv(csv_path)
+
+    # Example: convert numeric columns (adjust based on your dataset)
+    df = df.withColumn("price", df["price"].cast("double"))
+
+    return df
 
 
 def transform(df: DataFrame) -> dict[str, DataFrame]:
-    """Split the data by neighborhood and save each as a separate CSV file."""
-    raise NotImplementedError
+    """Split the data by neighborhood and return each as a separate DataFrame."""
+
+    result = {}
+
+    # Get all unique neighborhoods
+    neighborhoods = [row["neighborhood"] for row in df.select("neighborhood").distinct().collect()]
+
+    # Split into separate DataFrames
+    for n in neighborhoods:
+        result[n] = df.filter(df.neighborhood == n)
+
+    return result
 
 
 def load(partitions: dict[str, DataFrame], jdbc_url: str, pg_props: dict) -> None:
     """Insert each neighborhood dataset into its own PostgreSQL table."""
-    raise NotImplementedError
+
+    for name, df in partitions.items():
+        table_name = f"house_{name.lower().replace(' ', '_')}"
+
+        df.write \
+            .mode("overwrite") \
+            .jdbc(url=jdbc_url, table=table_name, properties=pg_props)
 
 
 # ── Main (do not modify) ───────────────────────────────────────────────────────
