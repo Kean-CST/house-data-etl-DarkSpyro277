@@ -67,26 +67,25 @@ def transform(df: DataFrame) -> dict[str, DataFrame]:
 
 
 import os
-import glob
 
-output_dir = "output/by_neighborhood"
-os.makedirs(output_dir, exist_ok=True)
+def load(partitions: dict[str, DataFrame], jdbc_url: str, pg_props: dict) -> None:
+    """Insert each neighborhood dataset into PostgreSQL AND save CSV files."""
 
-for name, df in partitions.items():
-    folder_path = f"{output_dir}/{name.lower().replace(' ', '_')}"
+    output_dir = "output/by_neighborhood"
+    os.makedirs(output_dir, exist_ok=True)
 
-    # Write with Spark
-    df.coalesce(1) \
-        .write \
-        .mode("overwrite") \
-        .option("header", True) \
-        .csv(folder_path)
+    for name, df in partitions.items():
+        # Save to PostgreSQL
+        table_name = f"house_{name.lower().replace(' ', '_')}"
+        df.write.mode("overwrite").jdbc(url=jdbc_url, table=table_name, properties=pg_props)
 
-    # Rename part file → required filename
-    part_file = glob.glob(f"{folder_path}/part-*.csv")[0]
-    final_file = f"{output_dir}/{name.lower().replace(' ', '_')}.csv"
+        #Save as CSV
+        csv_path = f"{output_dir}/{name.lower().replace(' ', '_')}.csv"
 
-    os.rename(part_file, final_file)
+        df.write \
+            .mode("overwrite") \
+            .option("header", True) \
+            .csv(csv_path)
 
 
 # ── Main (do not modify) ───────────────────────────────────────────────────────
