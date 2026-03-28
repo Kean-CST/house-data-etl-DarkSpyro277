@@ -11,14 +11,13 @@ Steps:
 from __future__ import annotations
 
 import csv  # noqa: F401
-import os  # noqa: F401
+import os  # KEEP ONLY ONCE HERE
 from pathlib import Path
 
 from dotenv import load_dotenv  # noqa: F401
 from pyspark.sql import DataFrame, SparkSession  # noqa: F401
 from pyspark.sql import functions as F  # noqa: F401
 
-# ── Predefined constants (do not modify) ──────────────────────────────────────
 ROOT = Path(__file__).resolve().parent.parent
 
 NEIGHBORHOODS = [
@@ -26,7 +25,7 @@ NEIGHBORHOODS = [
     "Oakwood", "Old Town", "Riverside", "Suburban Park", "University District",
 ]
 
-OUTPUT_DIR   = ROOT / "output" / "by_neighborhood"
+OUTPUT_DIR = ROOT / "output" / "by_neighborhood"
 OUTPUT_FILES = {hood: OUTPUT_DIR / f"{hood.replace(' ', '_').lower()}.csv" for hood in NEIGHBORHOODS}
 
 PG_TABLES = {hood: f"public.{hood.replace(' ', '_').lower()}" for hood in NEIGHBORHOODS}
@@ -40,46 +39,43 @@ PG_COLUMN_SCHEMA = (
     "distance_downtown_miles NUMERIC(6,2), sale_date DATE, days_on_market INTEGER"
 )
 
+# ── FUNCTIONS ──────────────────────────────────────
+
 def extract(spark: SparkSession, csv_path: str) -> DataFrame:
-    """Load the CSV dataset into a PySpark DataFrame with correct data types."""
-
     df = spark.read.option("header", True).csv(csv_path)
-
-    # Example: convert numeric columns (adjust based on your dataset)
     df = df.withColumn("price", df["price"].cast("double"))
-
     return df
 
 
 def transform(df: DataFrame) -> dict[str, DataFrame]:
-    """Split the data by neighborhood and return each as a separate DataFrame."""
-
     result = {}
 
-    # Get all unique neighborhoods
-    neighborhoods = [row["neighborhood"] for row in df.select("neighborhood").distinct().collect()]
+    neighborhoods = [
+        row["neighborhood"]
+        for row in df.select("neighborhood").distinct().collect()
+    ]
 
-    # Split into separate DataFrames
     for n in neighborhoods:
         result[n] = df.filter(df.neighborhood == n)
 
     return result
 
 
-import os
-
 def load(partitions: dict[str, DataFrame], jdbc_url: str, pg_props: dict) -> None:
-    """Insert each neighborhood dataset into PostgreSQL AND save CSV files."""
-
     output_dir = "output/by_neighborhood"
     os.makedirs(output_dir, exist_ok=True)
 
     for name, df in partitions.items():
-        # Save to PostgreSQL
         table_name = f"house_{name.lower().replace(' ', '_')}"
-        df.write.mode("overwrite").jdbc(url=jdbc_url, table=table_name, properties=pg_props)
 
-        #Save as CSV
+        # Save to PostgreSQL
+        df.write.mode("overwrite").jdbc(
+            url=jdbc_url,
+            table=table_name,
+            properties=pg_props
+        )
+
+        # Save to CSV
         csv_path = f"{output_dir}/{name.lower().replace(' ', '_')}.csv"
 
         df.write \
