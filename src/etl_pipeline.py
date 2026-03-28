@@ -40,8 +40,6 @@ PG_COLUMN_SCHEMA = (
     "distance_downtown_miles NUMERIC(6,2), sale_date DATE, days_on_market INTEGER"
 )
 
-from pyspark.sql.types import *
-
 def extract(spark: SparkSession, csv_path: str) -> DataFrame:
     """Load the CSV dataset into a PySpark DataFrame with correct data types."""
 
