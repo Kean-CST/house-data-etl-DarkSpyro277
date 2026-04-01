@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import csv  # noqa: F401
 import os  # KEEP ONLY ONCE HERE
+import re #noqa
 from pathlib import Path
 
 from dotenv import load_dotenv  # noqa: F401
@@ -42,46 +43,35 @@ PG_COLUMN_SCHEMA = (
 # ── FUNCTIONS ──────────────────────────────────────
 
 def extract(spark: SparkSession, csv_path: str) -> DataFrame:
-    df = spark.read.option("header", True).csv(csv_path)
-    df = df.withColumn("price", df["price"].cast("double"))
+    """Load the CSV dataset into a PySpark DataFrame with correct data types.""" 
+    df = spark.read.csv(csv_path, header=True, inferSchema=True)
+    df = df.withColumn("sale_date", F.to_date(F.col("sale_date"), "M/d/yy"))
     return df
 
 
 def transform(df: DataFrame) -> dict[str, DataFrame]:
-    result = {}
-
-    neighborhoods = [
-        row["neighborhood"]
-        for row in df.select("neighborhood").distinct().collect()
-    ]
-
-    for n in neighborhoods:
-        result[n] = df.filter(df.neighborhood == n)
-
-    return result
+    """Split the data by neighborhood and save each as a separate CSV file."""
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    partitions: dic[str, DataFrame] = {}
+    for hood in NEIGHBORHOODS:
+        hood_df = df.filter(F.col("neighborhood") == hood).orderBy("house_id")
+        partitions[hood] = hood_df
+        pdf = hood_df.toPandas()
+        pdf.to_csv(str(OUTPUT_FILES[hood]), index=False, date_format="%Y-%m-%d")
+    return partitions
 
 
 def load(partitions: dict[str, DataFrame], jdbc_url: str, pg_props: dict) -> None:
-    output_dir = "output/by_neighborhood"
-    os.makedirs(output_dir, exist_ok=True)
-
-    for name, df in partitions.items():
-        table_name = f"house_{name.lower().replace(' ', '_')}"
-
-        # Save to PostgreSQL
-        df.write.mode("overwrite").jdbc(
-            url=jdbc_url,
-            table=table_name,
-            properties=pg_props
+    clean = re.sub(r"\([^)]+\)", "", PG_COLUMN_SCHEMA)
+    pg_cols = [c.strip().split()[0] for c in clean.split(",")]
+    for hood, sdf in partitions.items():
+        table_name = PG_TABLES[hood]
+        pg_df = sdf.select(*pg_cols)
+        pg_df.write.jdbc(
+            url=jdbc_url, table=table_name, mode="overwrite", properties=pg_props
         )
 
-        # Save to CSV
-        csv_path = f"{output_dir}/{name.lower().replace(' ', '_')}.csv"
 
-        df.write \
-            .mode("overwrite") \
-            .option("header", True) \
-            .csv(csv_path)
 
 
 # ── Main (do not modify) ───────────────────────────────────────────────────────
