@@ -12,7 +12,9 @@ from __future__ import annotations
 
 import csv  # noqa: F401
 import os  # KEEP ONLY ONCE HERE
-import re #noqa
+import glob
+import shutil
+import re
 from pathlib import Path
 
 from dotenv import load_dotenv  # noqa: F401
@@ -60,10 +62,6 @@ def transform(df: DataFrame) -> dict[str, DataFrame]:
 
     return partitions
 
-
-import glob
-import shutil
-import re
 
 def load(partitions: dict[str, DataFrame], jdbc_url: str, pg_props: dict) -> None:
     """Insert each neighborhood dataset into PostgreSQL and save CSV files."""
