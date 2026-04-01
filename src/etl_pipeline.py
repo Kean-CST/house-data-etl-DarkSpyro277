@@ -93,7 +93,7 @@ def load(partitions: dict[str, DataFrame], jdbc_url: str, pg_props: dict) -> Non
             "first_time_buyer",
         ]
 
-        for col in ["has_pool", "recently_renovated", "has_children", "first_time_buyer"]:
+        for col in bool_cols:
             sdf = sdf.withColumn(
                 col,
                 F.when(F.col(col), F.lit("True")).otherwise(F.lit("False"))
