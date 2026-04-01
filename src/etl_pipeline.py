@@ -50,26 +50,62 @@ def extract(spark: SparkSession, csv_path: str) -> DataFrame:
 
 
 def transform(df: DataFrame) -> dict[str, DataFrame]:
-    """Split the data by neighborhood and save each as a separate CSV file."""
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    partitions: dic[str, DataFrame] = {}
+    """Split the data by neighborhood."""
+
+    partitions: dict[str, DataFrame] = {}
+
     for hood in NEIGHBORHOODS:
         hood_df = df.filter(F.col("neighborhood") == hood).orderBy("house_id")
         partitions[hood] = hood_df
-        pdf = hood_df.toPandas()
-        pdf.to_csv(str(OUTPUT_FILES[hood]), index=False, date_format="%Y-%m-%d")
+
     return partitions
 
 
+import glob
+import shutil
+import re
+
 def load(partitions: dict[str, DataFrame], jdbc_url: str, pg_props: dict) -> None:
+    """Insert each neighborhood dataset into PostgreSQL and save CSV files."""
+
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
     clean = re.sub(r"\([^)]+\)", "", PG_COLUMN_SCHEMA)
     pg_cols = [c.strip().split()[0] for c in clean.split(",")]
+
     for hood, sdf in partitions.items():
+        safe_name = hood.replace(" ", "_").lower()
+
+        # ── Save to PostgreSQL ──
         table_name = PG_TABLES[hood]
         pg_df = sdf.select(*pg_cols)
+
         pg_df.write.jdbc(
-            url=jdbc_url, table=table_name, mode="overwrite", properties=pg_props
+            url=jdbc_url,
+            table=table_name,
+            mode="overwrite",
+            properties=pg_props
         )
+
+        # ── Save CSV correctly (single file) ──
+        temp_dir = OUTPUT_DIR / f"tmp_{safe_name}"
+
+        sdf.coalesce(1) \
+            .write \
+            .mode("overwrite") \
+            .option("header", True) \
+            .csv(str(temp_dir))
+
+        # Find Spark output file
+        part_file = glob.glob(f"{temp_dir}/part-*.csv")[0]
+
+        final_path = OUTPUT_FILES[hood]
+
+        # Move to correct filename
+        shutil.move(part_file, final_path)
+
+        # Clean up temp folder
+        shutil.rmtree(temp_dir)
 
 
 
