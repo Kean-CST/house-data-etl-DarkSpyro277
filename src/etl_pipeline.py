@@ -85,6 +85,21 @@ def load(partitions: dict[str, DataFrame], jdbc_url: str, pg_props: dict) -> Non
             properties=pg_props
         )
 
+
+        bool_cols = [
+            "has_pool",
+            "recently_renovated",
+            "has_children",
+            "first_time_buyer",
+        ]
+
+        for col in bool_cols:
+            sdf = sdf.withColumn(
+                col,
+                F.when(F.col(col) == True, F.lit("True")).otherwise(F.lit("False"))
+            )
+
+
         # ── Save CSV correctly (single file) ──
         temp_dir = OUTPUT_DIR / f"tmp_{safe_name}"
 
